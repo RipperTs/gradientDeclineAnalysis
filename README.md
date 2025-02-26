@@ -1,4 +1,4 @@
-# pysnowball
+# 股票下跌趋势分析
 
 > 雪球APP Python API (需要自取token)
 
