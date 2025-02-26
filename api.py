@@ -117,4 +117,4 @@ if __name__ == '__main__':
     # 确保静态目录存在
     os.makedirs(STATIC_FOLDER, exist_ok=True)
     os.makedirs(ANALYSIS_RESULTS_DIR, exist_ok=True)
-    app.run(debug=True, port=PORT) 
+    app.run(debug=RELOAD, port=PORT, host='0.0.0.0') 
