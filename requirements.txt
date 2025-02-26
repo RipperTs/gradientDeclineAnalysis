@@ -1,0 +1,7 @@
+pysnowball
+requests
+flask
+python-dotenv
+pandas
+numpy
+matplotlib

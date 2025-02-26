@@ -1,0 +1,18 @@
+# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
+*/target
+*/log
+*/tomcat
+*.iml
+.idea/
+*.class
+target/
+tomcat/
+.project
+.settings/
+.classpath
+/log/
+.DS_Store
+.idea/*
+.env
+analysis_results
+/static/analysis_results
