@@ -6,11 +6,45 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime
 import os
+import platform
+from matplotlib.font_manager import FontManager
 
-# 设置matplotlib中文字体支持
-plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'SimHei', 'Microsoft YaHei']  # 优先使用这些字体
-plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
-plt.rcParams['font.family'] = 'sans-serif'  # 使用无衬线字体
+def setup_chinese_font():
+    """
+    设置中文字体，优先使用系统已安装的中文字体
+    """
+    fm = FontManager()
+    font_names = [f.name for f in fm.ttflist]
+    
+    # 按优先级排序的中文字体列表
+    chinese_fonts = [
+        'WenQuanYi Micro Hei',  # Linux优先
+        'Noto Sans CJK SC',     # Linux备选
+        'Microsoft YaHei',      # Windows优先
+        'SimHei',              # Windows备选
+        'Arial Unicode MS',    # MacOS优先
+        'PingFang SC',         # MacOS备选
+        'Heiti SC'             # MacOS备选
+    ]
+    
+    # 查找第一个可用的中文字体
+    for font in chinese_fonts:
+        if font in font_names:
+            plt.rcParams['font.sans-serif'] = [font]
+            break
+    else:
+        # 如果没有找到任何中文字体，使用默认字体并打印警告
+        print("警告：未找到合适的中文字体，可能会导致中文显示为方块")
+        print("建议安装以下字体之一：")
+        print("Linux: apt-get install fonts-wqy-microhei")
+        print("MacOS: 系统自带中文字体")
+        print("Windows: 系统自带中文字体")
+    
+    plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+    plt.rcParams['font.family'] = 'sans-serif'
+
+# 在程序开始时设置字体
+setup_chinese_font()
 
 from mock.mock_xueqiu import generate_mock_xueqiu_data
 from service.snowball_service import SnowballService
