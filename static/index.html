@@ -154,6 +154,37 @@
             margin: 5px 0;
             line-height: 1.5;
         }
+        .pattern-tabs {
+            margin-top: 20px;
+        }
+        .pattern-tabs .el-tabs__content {
+            padding: 20px;
+            background: #fff;
+        }
+        .pattern-tabs .el-tab-pane {
+            min-height: 300px;
+        }
+        .pattern-tabs .patterns-container {
+            margin-top: 0;
+            box-shadow: none;
+            padding: 0;
+        }
+        .pattern-tabs .el-tabs__header {
+            margin-bottom: 0;
+        }
+        .pattern-tabs .el-tabs__nav {
+            background: #fff;
+        }
+        .pattern-tabs .el-tabs__item {
+            height: 40px;
+            line-height: 40px;
+            font-size: 14px;
+            color: #606266;
+        }
+        .pattern-tabs .el-tabs__item.is-active {
+            color: #409EFF;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
@@ -301,117 +332,119 @@
                 </div>
             </div>
 
-            <div v-if="patterns.basic_patterns.length" class="patterns-container">
-                <h3>基础梯度下跌模式</h3>
-                <el-table :data="patterns.basic_patterns" style="width: 100%; margin-top: 20px">
-                    <!-- 显示行号 -->
-                    <el-table-column type="index" label="序号" width="80"></el-table-column>
-                    <el-table-column prop="date" label="日期" width="180">
-                        <template slot-scope="scope">
-                            <a href="javascript:void(0)" @click="jumpToDate(scope.row.date)">{{ scope.row.date }}</a>
-                        </template>
-                    </el-table-column>
-                    <el-table-column prop="close" label="收盘价"></el-table-column>
-                    <el-table-column prop="price_change" label="价格变化">
-                        <template slot-scope="scope">
-                            {{ (scope.row.price_change * 100).toFixed(2) }}%
-                        </template>
-                    </el-table-column>
-                    <el-table-column prop="total_decline_pct" label="总跌幅">
-                        <template slot-scope="scope">
-                            {{ scope.row.total_decline_pct.toFixed(2) }}%
-                        </template>
-                    </el-table-column>
-                </el-table>
+            <el-tabs v-model="activeTab" type="border-card" class="pattern-tabs">
+                <el-tab-pane label="基础梯度下跌" name="basic">
+                    <div v-if="patterns.basic_patterns.length" class="patterns-container">
+                        <el-table :data="patterns.basic_patterns" style="width: 100%; margin-top: 20px">
+                            <el-table-column type="index" label="序号" width="80"></el-table-column>
+                            <el-table-column prop="date" label="日期" width="180">
+                                <template slot-scope="scope">
+                                    <a href="javascript:void(0)" @click="jumpToDate(scope.row.date)">{{ scope.row.date }}</a>
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="close" label="收盘价"></el-table-column>
+                            <el-table-column prop="price_change" label="价格变化">
+                                <template slot-scope="scope">
+                                    {{ (scope.row.price_change * 100).toFixed(2) }}%
+                                </template>
+                            </el-table-column>
+                            <el-table-column prop="total_decline_pct" label="总跌幅">
+                                <template slot-scope="scope">
+                                    {{ scope.row.total_decline_pct.toFixed(2) }}%
+                                </template>
+                            </el-table-column>
+                        </el-table>
 
-                <div class="pattern-images">
-                    <template v-for="(chart, index) in patterns.charts.basic_patterns">
-                        <div :key="'basic-'+index" class="pattern-card">
-                            <h4>基础下跌模式 {{index + 1}}</h4>
-                            <img :src="chart" class="pattern-image" @click="showImage(chart, 'basic_patterns')">
+                        <div class="pattern-images">
+                            <template v-for="(chart, index) in patterns.charts.basic_patterns">
+                                <div :key="'basic-'+index" class="pattern-card">
+                                    <h4>基础下跌模式 {{index + 1}}</h4>
+                                    <img :src="chart" class="pattern-image" @click="showImage(chart, 'basic_patterns')">
+                                </div>
+                            </template>
                         </div>
-                    </template>
-                </div>
-            </div>
+                    </div>
+                </el-tab-pane>
 
-            <!-- 连续价格下跌模式 -->
-            <div v-if="patterns.charts.consecutive_declines?.length" class="patterns-container">
-                <h3>连续价格下跌模式（基于价格变化率）</h3>
-                <div class="pattern-description">
-                    <p>这种模式识别连续的价格下跌，不考虑成交量等其他因素。</p>
-                    <ul>
-                        <li>图表中红色K线表示下跌，绿色K线表示上涨</li>
-                        <li>重点关注：连续下跌的天数和跌幅大小</li>
-                        <li>点击图片可放大查看，使用键盘左右键或点击两侧按钮切换图片</li>
-                        <li>每个图表都标注了具体的下跌起止时间和累计跌幅</li>
-                    </ul>
-                </div>
-                <div class="pattern-images">
-                    <template v-for="(chart, index) in patterns.charts.consecutive_declines">
-                        <div :key="'consecutive-'+index" class="pattern-card">
-                            <h4>连续下跌 {{index + 1}}</h4>
-                            <img :src="chart" class="pattern-image" @click="showImage(chart, 'consecutive_declines')">
+                <el-tab-pane label="连续价格下跌" name="consecutive">
+                    <div v-if="patterns.charts.consecutive_declines?.length" class="patterns-container">
+                        <div class="pattern-description">
+                            <p>这种模式识别连续的价格下跌，不考虑成交量等其他因素。</p>
+                            <ul>
+                                <li>图表中红色K线表示下跌，绿色K线表示上涨</li>
+                                <li>重点关注：连续下跌的天数和跌幅大小</li>
+                                <li>点击图片可放大查看，使用键盘左右键或点击两侧按钮切换图片</li>
+                                <li>每个图表都标注了具体的下跌起止时间和累计跌幅</li>
+                            </ul>
                         </div>
-                    </template>
-                </div>
-            </div>
+                        <div class="pattern-images">
+                            <template v-for="(chart, index) in patterns.charts.consecutive_declines">
+                                <div :key="'consecutive-'+index" class="pattern-card">
+                                    <h4>连续下跌 {{index + 1}}</h4>
+                                    <img :src="chart" class="pattern-image" @click="showImage(chart, 'consecutive_declines')">
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </el-tab-pane>
 
-            <!-- 成交量确认的下跌模式 -->
-            <div v-if="patterns.charts.volume_confirmed_declines?.length" class="patterns-container">
-                <h3>伴随成交量增加的下跌模式（通常意味着抛压较大）</h3>
-                <div class="pattern-images">
-                    <template v-for="(chart, index) in patterns.charts.volume_confirmed_declines">
-                        <div :key="'volume-'+index" class="pattern-card">
-                            <h4>成交量确认下跌 {{index + 1}}</h4>
-                            <img :src="chart" class="pattern-image" @click="showImage(chart, 'volume_confirmed_declines')">
+                <el-tab-pane label="成交量确认下跌" name="volume">
+                    <div v-if="patterns.charts.volume_confirmed_declines?.length" class="patterns-container">
+                        <div class="pattern-images">
+                            <template v-for="(chart, index) in patterns.charts.volume_confirmed_declines">
+                                <div :key="'volume-'+index" class="pattern-card">
+                                    <h4>成交量确认下跌 {{index + 1}}</h4>
+                                    <img :src="chart" class="pattern-image" @click="showImage(chart, 'volume_confirmed_declines')">
+                                </div>
+                            </template>
                         </div>
-                    </template>
-                </div>
-            </div>
+                    </div>
+                </el-tab-pane>
 
-            <!-- MA交叉下跌模式 -->
-            <div v-if="patterns.charts.ma_crossover_declines?.length" class="patterns-container">
-                <h3>移动平均线交叉下跌（价格下穿均线且均线向下）</h3>
-                <div class="pattern-description">
-                    <p>这种模式结合了均线系统，是较为可靠的下跌信号。</p>
-                    <ul>
-                        <li>图表中包含MA5、MA10、MA20等多条均线</li>
-                        <li>重点关注：价格与均线的交叉点，均线系统的向下发散</li>
-                        <li>死叉形态：短期均线下穿长期均线</li>
-                        <li>均线向下倾斜程度反映下跌趋势的强度</li>
-                    </ul>
-                </div>
-                <div class="pattern-images">
-                    <template v-for="(chart, index) in patterns.charts.ma_crossover_declines">
-                        <div :key="'ma-'+index" class="pattern-card">
-                            <h4>均线交叉下跌 {{index + 1}}</h4>
-                            <img :src="chart" class="pattern-image" @click="showImage(chart, 'ma_crossover_declines')">
+                <el-tab-pane label="均线交叉下跌" name="ma">
+                    <div v-if="patterns.charts.ma_crossover_declines?.length" class="patterns-container">
+                        <div class="pattern-description">
+                            <p>这种模式结合了均线系统，是较为可靠的下跌信号。</p>
+                            <ul>
+                                <li>图表中包含MA5、MA10、MA20等多条均线</li>
+                                <li>重点关注：价格与均线的交叉点，均线系统的向下发散</li>
+                                <li>死叉形态：短期均线下穿长期均线</li>
+                                <li>均线向下倾斜程度反映下跌趋势的强度</li>
+                            </ul>
                         </div>
-                    </template>
-                </div>
-            </div>
+                        <div class="pattern-images">
+                            <template v-for="(chart, index) in patterns.charts.ma_crossover_declines">
+                                <div :key="'ma-'+index" class="pattern-card">
+                                    <h4>均线交叉下跌 {{index + 1}}</h4>
+                                    <img :src="chart" class="pattern-image" @click="showImage(chart, 'ma_crossover_declines')">
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </el-tab-pane>
 
-            <!-- 趋势下跌模式 -->
-            <div v-if="patterns.charts.trend_declines?.length" class="patterns-container">
-                <h3>趋势下跌模式（允许中间有少量上涨日）</h3>
-                <div class="pattern-description">
-                    <p>这是一种更灵活的下跌模式，符合实际市场走势特点。</p>
-                    <ul>
-                        <li>允许在下跌过程中出现短期反弹</li>
-                        <li>重点关注：整体下跌趋势的持续性，反弹的高度和持续时间</li>
-                        <li>高点逐级降低，低点也逐级降低是典型特征</li>
-                        <li>可以通过调整"最大上涨天数"参数来控制允许的反弹程度</li>
-                    </ul>
-                </div>
-                <div class="pattern-images">
-                    <template v-for="(chart, index) in patterns.charts.trend_declines">
-                        <div :key="'trend-'+index" class="pattern-card">
-                            <h4>趋势下跌 {{index + 1}}</h4>
-                            <img :src="chart" class="pattern-image" @click="showImage(chart, 'trend_declines')">
+                <el-tab-pane label="趋势下跌" name="trend">
+                    <div v-if="patterns.charts.trend_declines?.length" class="patterns-container">
+                        <div class="pattern-description">
+                            <p>这是一种更灵活的下跌模式，符合实际市场走势特点。</p>
+                            <ul>
+                                <li>允许在下跌过程中出现短期反弹</li>
+                                <li>重点关注：整体下跌趋势的持续性，反弹的高度和持续时间</li>
+                                <li>高点逐级降低，低点也逐级降低是典型特征</li>
+                                <li>可以通过调整"最大上涨天数"参数来控制允许的反弹程度</li>
+                            </ul>
                         </div>
-                    </template>
-                </div>
-            </div>
+                        <div class="pattern-images">
+                            <template v-for="(chart, index) in patterns.charts.trend_declines">
+                                <div :key="'trend-'+index" class="pattern-card">
+                                    <h4>趋势下跌 {{index + 1}}</h4>
+                                    <img :src="chart" class="pattern-image" @click="showImage(chart, 'trend_declines')">
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </el-tab-pane>
+            </el-tabs>
         </div>
 
         <el-dialog :visible.sync="imageDialogVisible" width="90%" top="2vh" class="image-viewer-dialog">
@@ -469,7 +502,8 @@
                     currentImageIndex: 0,
                     currentImageType: '',
                     allImages: [],
-                    klineChart: null
+                    klineChart: null,
+                    activeTab: 'basic'
                 }
             },
             computed: {
