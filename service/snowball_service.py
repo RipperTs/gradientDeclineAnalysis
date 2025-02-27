@@ -129,6 +129,7 @@ class SnowballService:
     def suggest_stock(self, keyword):
         """
         根据关键词搜索股票
+        :param keyword: 关键词
         :return:
         """
         result = ball.suggest_stock(keyword)
@@ -137,4 +138,4 @@ class SnowballService:
 
 if __name__ == '__main__':
     snowball = SnowballService()
-    print(snowball.kline('SH688981',2))
+    print(snowball.suggest_stock('完美世界'))

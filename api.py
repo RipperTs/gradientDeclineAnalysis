@@ -13,12 +13,18 @@ def index():
 @app.route(f'/api/{API_VERSION}/analyze', methods=['GET'])
 def analyze_stock():
     try:
-        # 获取请求参数
+        # 获取基本请求参数
         stock_code = request.args.get('symbol', DEFAULT_STOCK)
         start_date = request.args.get('start_date', DEFAULT_START_DATE)
         end_date = request.args.get('end_date', DEFAULT_END_DATE)
         window = int(request.args.get('window', str(DEFAULT_WINDOW)))
         threshold = float(request.args.get('threshold', str(DEFAULT_THRESHOLD))) / 100
+        
+        # 获取趋势下跌相关参数
+        trend_window = int(request.args.get('trend_window', str(window * 2)))
+        trend_threshold = float(request.args.get('trend_threshold', '1.0')) / 100
+        max_up_days = int(request.args.get('max_up_days', str(trend_window // 3)))
+        min_down_days = int(request.args.get('min_down_days', str(trend_window // 2)))
 
         # 运行分析
         patterns, result_dir = analyze_market_declines(
@@ -26,7 +32,13 @@ def analyze_stock():
             start_date=start_date,
             end_date=end_date,
             window=window,
-            threshold=threshold
+            threshold=threshold,
+            trend_params={
+                'trend_window': trend_window,
+                'trend_threshold': trend_threshold,
+                'max_up_days': max_up_days,
+                'min_down_days': min_down_days
+            }
         )
 
         # 获取原始K线数据
@@ -45,12 +57,25 @@ def analyze_stock():
                 'consecutive_declines': [],
                 'volume_confirmed_declines': [],
                 'ma_crossover_declines': [],
+                'trend_declines': [],
                 'charts': {
                     'basic_patterns': [],
                     'consecutive_declines': [],
                     'volume_confirmed_declines': [],
-                    'ma_crossover_declines': []
+                    'ma_crossover_declines': [],
+                    'trend_declines': []
                 }
+            },
+            'params': {
+                'symbol': stock_code,
+                'start_date': start_date,
+                'end_date': end_date,
+                'window': window,
+                'threshold': threshold * 100,
+                'trend_window': trend_window,
+                'trend_threshold': trend_threshold * 100,
+                'max_up_days': max_up_days,
+                'min_down_days': min_down_days
             },
             'error_code': 0,
             'error_description': ''
@@ -104,6 +129,8 @@ def analyze_stock():
                     response['patterns']['charts']['volume_confirmed_declines'].append(file_path)
                 elif filename.startswith('ma_crossover_declines_'):
                     response['patterns']['charts']['ma_crossover_declines'].append(file_path)
+                elif filename.startswith('trend_declines_'):
+                    response['patterns']['charts']['trend_declines'].append(file_path)
 
         return jsonify(response)
 

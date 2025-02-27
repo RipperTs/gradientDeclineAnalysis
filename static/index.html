@@ -157,8 +157,8 @@
                     </el-col>
                 </el-row>
                 <el-row :gutter="20">
-                    <el-col :xs="24" :sm="12" :md="8">
-                        <el-form-item label="下跌天数" prop="window">
+                    <el-col :xs="24" :sm="12" :md="6">
+                        <el-form-item label="下跌次数" prop="window">
                             <el-input-number 
                                 v-model="form.window" 
                                 :min="1" 
@@ -167,8 +167,8 @@
                             </el-input-number>
                         </el-form-item>
                     </el-col>
-                    <el-col :xs="24" :sm="12" :md="8">
-                        <el-form-item label="下跌阈值" prop="threshold">
+                    <el-col :xs="24" :sm="12" :md="6">
+                        <el-form-item label="下跌阈值%" prop="threshold">
                             <el-input-number 
                                 v-model="form.threshold" 
                                 :min="0.1" 
@@ -179,11 +179,58 @@
                             </el-input-number>
                         </el-form-item>
                     </el-col>
-                    <el-col :xs="24" :sm="12" :md="8">
+                    <el-col :xs="24" :sm="24" :md="12">
                         <el-form-item>
                             <el-button type="primary" @click="submitForm" :loading="loading" style="width: 100%">
                                 分析
                             </el-button>
+                        </el-form-item>
+                    </el-col>
+                </el-row>
+                
+                <el-divider content-position="left">高级参数设置</el-divider>
+                
+                <el-row :gutter="20">
+                    <el-col :xs="24" :sm="12" :md="6">
+                        <el-form-item label="趋势窗口" prop="trend_window">
+                            <el-input-number 
+                                v-model="form.trend_window" 
+                                :min="5" 
+                                :max="60"
+                                style="width: 100%">
+                            </el-input-number>
+                        </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :sm="12" :md="6">
+                        <el-form-item label="趋势阈值%" prop="trend_threshold">
+                            <el-input-number 
+                                v-model="form.trend_threshold" 
+                                :min="0.5" 
+                                :max="20"
+                                :step="0.5"
+                                :precision="1"
+                                style="width: 100%">
+                            </el-input-number>
+                        </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :sm="12" :md="6">
+                        <el-form-item label="最大上涨天数" prop="max_up_days">
+                            <el-input-number 
+                                v-model="form.max_up_days" 
+                                :min="1" 
+                                :max="30"
+                                style="width: 100%">
+                            </el-input-number>
+                        </el-form-item>
+                    </el-col>
+                    <el-col :xs="24" :sm="12" :md="6">
+                        <el-form-item label="最小下跌天数" prop="min_down_days">
+                            <el-input-number 
+                                v-model="form.min_down_days" 
+                                :min="1" 
+                                :max="30"
+                                style="width: 100%">
+                            </el-input-number>
                         </el-form-item>
                     </el-col>
                 </el-row>
@@ -201,6 +248,8 @@
             <div v-if="patterns.basic_patterns.length" class="patterns-container">
                 <h3>基础梯度下跌模式</h3>
                 <el-table :data="patterns.basic_patterns" style="width: 100%; margin-top: 20px">
+                    <!-- 显示行号 -->
+                    <el-table-column type="index" label="序号" width="80"></el-table-column>
                     <el-table-column prop="date" label="日期" width="180"></el-table-column>
                     <el-table-column prop="close" label="收盘价"></el-table-column>
                     <el-table-column prop="price_change" label="价格变化">
@@ -263,6 +312,19 @@
                     </template>
                 </div>
             </div>
+
+            <!-- 趋势下跌模式 -->
+            <div v-if="patterns.charts.trend_declines?.length" class="patterns-container">
+                <h3>趋势下跌模式（允许中间有少量上涨日）</h3>
+                <div class="pattern-images">
+                    <template v-for="(chart, index) in patterns.charts.trend_declines">
+                        <div :key="'trend-'+index" class="pattern-card">
+                            <h4>趋势下跌 {{index + 1}}</h4>
+                            <img :src="chart" class="pattern-image" @click="showImage(chart, 'trend_declines')">
+                        </div>
+                    </template>
+                </div>
+            </div>
         </div>
 
         <el-dialog :visible.sync="imageDialogVisible" width="90%" top="2vh" class="image-viewer-dialog">
@@ -283,10 +345,14 @@
                     symbol: 'SH688981',
                     start_date: '2024-01-01',
                     end_date: '2025-02-25',
-                    window: 5,
-                    threshold: 0.5
+                    window: 3,
+                    threshold: 1.0,
+                    trend_window: 10,
+                    trend_threshold: 5.0,
+                    max_up_days: 3,
+                    min_down_days: 5
                 };
-
+                
                 return {
                     form: cachedForm,
                     rules: {
@@ -379,27 +445,47 @@
                         }
                     }
                 },
-                submitForm() {
-                    this.$refs.form.validate(async (valid) => {
-                        if (valid) {
-                            this.loading = true;
-                            try {
-                                const response = await axios.get('/api/v1/analyze', {
-                                    params: this.form
-                                });
-                                this.klineData = response.data.data;
-                                this.patterns = response.data.patterns;
-                                this.hasData = true;
-                                this.$nextTick(() => {
-                                    this.initKlineChart();
-                                });
-                            } catch (error) {
-                                this.$message.error(error.response?.data?.error_description || '请求失败');
-                            } finally {
-                                this.loading = false;
-                            }
-                        }
-                    });
+                async submitForm() {
+                    if (!this.form.symbol) {
+                        this.$message.error('请输入股票代码');
+                        return;
+                    }
+                    
+                    // 缓存表单数据到localStorage
+                    localStorage.setItem('stockAnalysisForm', JSON.stringify(this.form));
+                    
+                    this.loading = true;
+                    this.showResults = false;
+                    
+                    // 构建请求参数
+                    const params = new URLSearchParams();
+                    params.append('symbol', this.form.symbol);
+                    if (this.form.start_date) params.append('start_date', this.form.start_date);
+                    if (this.form.end_date) params.append('end_date', this.form.end_date);
+                    params.append('window', this.form.window);
+                    params.append('threshold', this.form.threshold);
+                    
+                    // 添加高级参数
+                    params.append('trend_window', this.form.trend_window);
+                    params.append('trend_threshold', this.form.trend_threshold);
+                    params.append('max_up_days', this.form.max_up_days);
+                    params.append('min_down_days', this.form.min_down_days);
+                    
+                    try {
+                        const response = await axios.get('/api/v1/analyze', {
+                            params: params
+                        });
+                        this.klineData = response.data.data;
+                        this.patterns = response.data.patterns;
+                        this.hasData = true;
+                        this.$nextTick(() => {
+                            this.initKlineChart();
+                        });
+                    } catch (error) {
+                        this.$message.error(error.response?.data?.error_description || '请求失败');
+                    } finally {
+                        this.loading = false;
+                    }
                 },
                 initKlineChart() {
                     const chart = echarts.init(document.getElementById('klineChart'))

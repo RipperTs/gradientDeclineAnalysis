@@ -58,7 +58,7 @@ def detect_gradient_decline(df, window=5, threshold=0.005):
 
     参数:
     - df: 包含股票数据的DataFrame（必须有'close'列）
-    - window: 要寻找的连续下跌天数
+    - window: 要寻找的连续下跌次数（不一定是连续天数）
     - threshold: 符合条件的最小下跌百分比
 
     返回:
@@ -73,32 +73,120 @@ def detect_gradient_decline(df, window=5, threshold=0.005):
     # 为价格下跌的日子创建信号
     data['decline'] = (data['price_change'] < -threshold).astype(int)
 
-    # 使用滚动窗口查找连续下跌
-    data['consecutive_declines'] = data['decline'].rolling(window=window).sum()
-
-    # 找出恰好有'window'个连续下跌的位置
-    patterns = data[data['consecutive_declines'] == window].copy()
-
-    # 如果没有找到任何模式，返回空DataFrame
-    if patterns.empty:
-        return patterns
-
-    # 计算每个模式的总下跌百分比
-    for idx in patterns.index:
-        # 找到起始位置
-        idx_loc = data.index.get_loc(idx)
-        start_idx_loc = max(0, idx_loc - window + 1)
-        start_idx = data.index[start_idx_loc]
-
-        # 获取起始和结束价格
-        start_price = data.loc[start_idx, 'close']
-        end_price = data.loc[idx, 'close']
-
-        # 计算总跌幅百分比
-        total_decline = (end_price - start_price) / start_price * 100
-        patterns.loc[idx, 'total_decline_pct'] = total_decline
-
+    # 初始化结果DataFrame
+    patterns = pd.DataFrame()
+    
+    # 查找连续下跌模式（不要求严格连续天数）
+    decline_count = 0
+    decline_start_idx = None
+    
+    for i in range(1, len(data)):
+        current_idx = data.index[i]
+        
+        # 如果当天下跌
+        if data.loc[current_idx, 'decline'] == 1:
+            # 如果是新的下跌序列开始
+            if decline_count == 0:
+                decline_start_idx = data.index[i-1]  # 记录下跌开始前一天的索引
+            
+            # 增加下跌计数
+            decline_count += 1
+            
+            # 如果达到了指定的连续下跌次数
+            if decline_count == window:
+                # 计算总跌幅
+                start_price = data.loc[decline_start_idx, 'close']
+                end_price = data.loc[current_idx, 'close']
+                total_decline_pct = (end_price - start_price) / start_price * 100
+                
+                # 创建新行
+                new_row = pd.DataFrame({
+                    'close': [end_price],
+                    'start_price': [start_price],
+                    'start_date': [decline_start_idx],
+                    'price_change': [data.loc[current_idx, 'price_change']],
+                    'total_decline_pct': [total_decline_pct],
+                    'decline_days': [(current_idx - decline_start_idx).days]
+                }, index=[current_idx])
+                
+                # 添加到结果中
+                patterns = pd.concat([patterns, new_row])
+                
+                # 重置计数器，允许检测重叠的模式
+                decline_count = 0
+        
+        # 如果当天不是下跌但下跌次数不足window，继续保持当前下跌序列
+        # 这里不重置decline_count，允许中间有非下跌日
+    
     return patterns
+
+
+def detect_trend_decline(df, window=10, threshold=0.05, max_up_days=3, min_down_days=5):
+    """
+    检测股票数据中的趋势性下跌模式，允许中间有少量上涨日。
+    
+    参数:
+    - df: 包含股票数据的DataFrame（必须有'close'列）
+    - window: 要检查的窗口天数
+    - threshold: 整体下跌的最小百分比阈值
+    - max_up_days: 窗口内允许的最大上涨天数
+    - min_down_days: 窗口内要求的最小下跌天数
+    
+    返回:
+    - 包含检测到的模式的DataFrame
+    """
+    # 确保使用的是副本
+    data = df.copy()
+    
+    # 计算每日价格变化
+    data['price_change'] = data['close'].pct_change()
+    
+    # 标记上涨和下跌日
+    data['up_day'] = (data['price_change'] > 0).astype(int)
+    data['down_day'] = (data['price_change'] < 0).astype(int)
+    
+    # 初始化结果DataFrame
+    trend_patterns = pd.DataFrame()
+    
+    # 对每个可能的窗口结束位置进行检查
+    for i in range(window, len(data)):
+        end_idx = data.index[i]
+        start_idx = data.index[i - window]
+        
+        # 获取窗口数据
+        window_data = data.loc[start_idx:end_idx].copy()
+        
+        # 计算窗口内的上涨和下跌天数
+        up_days = window_data['up_day'].sum()
+        down_days = window_data['down_day'].sum()
+        
+        # 计算窗口内的总价格变化百分比
+        start_price = window_data['close'].iloc[0]
+        end_price = window_data['close'].iloc[-1]
+        total_change_pct = (end_price - start_price) / start_price * 100
+        
+        # 检查是否符合趋势下跌条件:
+        # 1. 总跌幅超过阈值
+        # 2. 上涨天数不超过允许的最大值
+        # 3. 下跌天数不少于要求的最小值
+        if (total_change_pct < -threshold and 
+            up_days <= max_up_days and 
+            down_days >= min_down_days):
+            
+            # 创建新行
+            new_row = pd.DataFrame({
+                'close': [end_price],
+                'start_price': [start_price],
+                'total_decline_pct': [total_change_pct],
+                'up_days': [up_days],
+                'down_days': [down_days],
+                'window_size': [window]
+            }, index=[end_idx])
+            
+            # 添加到结果中
+            trend_patterns = pd.concat([trend_patterns, new_row])
+    
+    return trend_patterns
 
 
 def fetch_data_from_xueqiu(stock_code, start_date, end_date):
@@ -174,14 +262,23 @@ def visualize_pattern(data, pattern_date, window=5):
     """
     # 获取模式周围的数据
     pattern_idx = data.index.get_loc(pattern_date)
-    start_idx = max(0, pattern_idx - window * 2)
-    end_idx = min(len(data) - 1, pattern_idx + window)
+    
+    # 获取起始日期（如果在patterns中有记录）
+    if 'start_date' in data.loc[pattern_date]:
+        start_date = data.loc[pattern_date, 'start_date']
+        start_idx = data.index.get_loc(start_date)
+    else:
+        # 如果没有记录起始日期，使用默认的窗口大小
+        start_idx = max(0, pattern_idx - window * 2)
+    
+    # 设置显示范围
+    display_start_idx = max(0, start_idx - 5)  # 显示起始日期前5个交易日
+    end_idx = min(len(data) - 1, pattern_idx + 5)  # 显示结束日期后5个交易日
 
-    plot_data = data.iloc[start_idx:end_idx + 1].copy()
+    plot_data = data.iloc[display_start_idx:end_idx + 1].copy()
 
     # 获取模式部分
-    decline_start_idx = max(0, pattern_idx - window + 1)
-    decline_data = data.iloc[decline_start_idx:pattern_idx + 1].copy()
+    decline_data = data.iloc[start_idx:pattern_idx + 1].copy()
 
     # 创建图表
     fig, ax = plt.subplots(figsize=(12, 6))
@@ -212,23 +309,44 @@ def visualize_pattern(data, pattern_date, window=5):
 
     # 突出显示下跌模式
     # 找出decline_data在plot_data中的索引位置
-    decline_indices = [x_values[plot_data.index.get_loc(idx)] for idx in decline_data.index]
-    ax.plot(decline_indices, decline_data['close'], 'r--', linewidth=2, label=f'{window}天下跌')
+    decline_indices = [x_values[plot_data.index.get_loc(idx)] for idx in decline_data.index if idx in plot_data.index]
+    decline_prices = [decline_data.loc[idx, 'close'] for idx in decline_data.index if idx in plot_data.index]
+    
+    # 绘制趋势线
+    ax.plot(decline_indices, decline_prices, 'r-', linewidth=2, label=f'梯度下跌')
+    
+    # 标记起点和终点
+    if decline_indices:
+        ax.scatter(decline_indices[0], decline_prices[0], color='yellow', s=100, zorder=5)
+        ax.scatter(decline_indices[-1], decline_prices[-1], color='red', s=100, zorder=5)
+        
+        # 添加总跌幅标注
+        total_decline = (decline_prices[-1] - decline_prices[0]) / decline_prices[0] * 100
+        days_count = len(decline_indices)
+        ax.annotate(f"总跌幅: {total_decline:.2f}%\n下跌次数: {window}\n持续天数: {days_count}",
+                   (decline_indices[-1], decline_prices[-1]),
+                   textcoords="offset points",
+                   xytext=(10, -20),
+                   ha='left',
+                   fontsize=10,
+                   color='red',
+                   bbox=dict(boxstyle="round,pad=0.3", fc='#1E1E1E', ec="red", alpha=0.8))
 
-    # 添加注释
+    # 添加下跌日的标注
     for j, idx in enumerate(decline_data.index):
-        plot_idx = x_values[plot_data.index.get_loc(idx)]
-        if j > 0:
+        if idx in plot_data.index and j > 0:
+            plot_idx = x_values[plot_data.index.get_loc(idx)]
             prev_close = decline_data['close'].iloc[j - 1]
             curr_close = decline_data['close'].iloc[j]
             pct_change = (curr_close - prev_close) / prev_close * 100
-            ax.annotate(f"{pct_change:.2f}%",
-                        (plot_idx, curr_close),
-                        textcoords="offset points",
-                        xytext=(0, 10),
-                        ha='center',
-                        fontsize=8,
-                        color='red')
+            if pct_change < 0:  # 只标注下跌日
+                ax.annotate(f"{pct_change:.2f}%",
+                           (plot_idx, curr_close),
+                           textcoords="offset points",
+                           xytext=(0, 10),
+                           ha='center',
+                           fontsize=8,
+                           color='red')
 
     # 设置x轴刻度为日期
     step = max(1, len(plot_data) // 10)  # 最多显示10个刻度
@@ -257,23 +375,47 @@ def visualize_pattern(data, pattern_date, window=5):
     return fig
 
 
-def advanced_decline_analysis(df, window=5):
+def advanced_decline_analysis(df, window=5, threshold=0.5, trend_params=None):
     """
     执行多种类型的下跌模式检测。
 
     参数:
     - df: 包含股票数据的DataFrame
     - window: 模式窗口大小
+    - threshold: 下跌阈值百分比
+    - trend_params: 趋势下跌的参数字典，包含以下键:
+        - trend_window: 趋势窗口大小
+        - trend_threshold: 趋势下跌阈值
+        - max_up_days: 最大允许上涨天数
+        - min_down_days: 最小要求下跌天数
 
     返回:
     - 包含不同模式类型的字典
     """
+    # 设置默认的趋势参数
+    if trend_params is None:
+        trend_params = {
+            'trend_window': window * 2,
+            'trend_threshold': threshold * 5,  # 默认为基本阈值的5倍
+            'max_up_days': (window * 2) // 3,
+            'min_down_days': (window * 2) // 2
+        }
+    
     results = {}
 
     # 1. 基本连续价格下跌
-    results['consecutive_declines'] = detect_gradient_decline(df, window, 0.005)
+    results['consecutive_declines'] = detect_gradient_decline(df, window, threshold)
+    
+    # 2. 趋势性下跌（新增）
+    results['trend_declines'] = detect_trend_decline(
+        df, 
+        window=trend_params['trend_window'], 
+        threshold=trend_params['trend_threshold'],
+        max_up_days=trend_params['max_up_days'],
+        min_down_days=trend_params['min_down_days']
+    )
 
-    # 2. 成交量增加的下跌
+    # 3. 成交量增加的下跌
     if 'volume' in df.columns:
         # 计算成交量增加
         data = df.copy()
@@ -285,7 +427,7 @@ def advanced_decline_analysis(df, window=5):
         data['consecutive_vol_declines'] = data['decline'].rolling(window=window).sum()
         results['volume_confirmed_declines'] = data[data['consecutive_vol_declines'] == window].copy()
 
-    # 3. 移动平均线交叉下跌（价格穿越MA线向下）
+    # 4. 移动平均线交叉下跌（价格穿越MA线向下）
     if 'ma20' not in df.columns and len(df) >= 20:
         df['ma20'] = df['close'].rolling(window=20).mean()
 
@@ -417,7 +559,115 @@ def visualize_advanced_pattern(data, pattern_date, pattern_type, window=5):
     return fig
 
 
-def analyze_market_declines(stock_code, start_date, end_date, window=5, threshold=0.005):
+def visualize_trend_pattern(data, pattern_date, window=10):
+    """
+    可视化趋势下跌模式。
+
+    参数:
+    - data: 完整的股票数据DataFrame
+    - pattern_date: 模式完成的日期
+    - window: 模式窗口大小
+    """
+    # 获取模式周围的数据
+    pattern_idx = data.index.get_loc(pattern_date)
+    start_idx = max(0, pattern_idx - window)
+    end_idx = min(len(data) - 1, pattern_idx + window // 2)
+
+    plot_data = data.iloc[start_idx:end_idx + 1].copy()
+
+    # 获取模式部分
+    trend_data = data.iloc[pattern_idx - window + 1:pattern_idx + 1].copy()
+
+    # 创建图表
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), height_ratios=[3, 1])
+    fig.suptitle(f'趋势下跌模式 {pattern_date.strftime("%Y-%m-%d")}', color='white')
+
+    # 创建一个数字索引用于绘图
+    x_values = np.arange(len(plot_data))
+    
+    # 绘制OHLC K线
+    for i, (idx, row) in enumerate(plot_data.iterrows()):
+        color = 'red' if row['close'] < row['open'] else 'green'
+        ax1.plot([i, i], [row['low'], row['high']], color=color, linewidth=1)
+        ax1.plot([i - 0.3, i + 0.3], [row['open'], row['open']], color=color, linewidth=2)
+        ax1.plot([i - 0.3, i + 0.3], [row['close'], row['close']], color=color, linewidth=2)
+
+    # 绘制移动平均线
+    if 'ma5' in plot_data.columns:
+        ax1.plot(x_values, plot_data['ma5'], 'white', linewidth=1, label='MA5')
+    if 'ma10' in plot_data.columns:
+        ax1.plot(x_values, plot_data['ma10'], 'yellow', linewidth=1, label='MA10')
+    if 'ma20' in plot_data.columns:
+        ax1.plot(x_values, plot_data['ma20'], 'magenta', linewidth=1, label='MA20')
+    if 'ma30' in plot_data.columns:
+        ax1.plot(x_values, plot_data['ma30'], 'green', linewidth=1, label='MA30')
+    if 'ma60' in plot_data.columns:
+        ax1.plot(x_values, plot_data['ma60'], 'blue', linewidth=1, label='MA60')
+
+    # 突出显示趋势下跌
+    trend_indices = [x_values[plot_data.index.get_loc(idx)] for idx in trend_data.index if idx in plot_data.index]
+    trend_prices = [trend_data.loc[idx, 'close'] for idx in trend_data.index if idx in plot_data.index]
+    
+    # 绘制趋势线
+    ax1.plot(trend_indices, trend_prices, 'r-', linewidth=2, label=f'趋势下跌')
+    
+    # 标记起点和终点
+    if trend_indices:
+        ax1.scatter(trend_indices[0], trend_prices[0], color='yellow', s=100, zorder=5)
+        ax1.scatter(trend_indices[-1], trend_prices[-1], color='red', s=100, zorder=5)
+        
+        # 添加总跌幅标注
+        total_decline = (trend_prices[-1] - trend_prices[0]) / trend_prices[0] * 100
+        ax1.annotate(f"总跌幅: {total_decline:.2f}%",
+                    (trend_indices[-1], trend_prices[-1]),
+                    textcoords="offset points",
+                    xytext=(10, -20),
+                    ha='left',
+                    fontsize=10,
+                    color='red',
+                    bbox=dict(boxstyle="round,pad=0.3", fc='#1E1E1E', ec="red", alpha=0.8))
+
+    # 在第二个子图中绘制价格变化百分比
+    price_changes = plot_data['close'].pct_change() * 100
+    colors = ['red' if x < 0 else 'green' for x in price_changes]
+    ax2.bar(x_values[1:], price_changes[1:], color=colors[1:])
+    ax2.axhline(y=0, color='white', linestyle='-', alpha=0.3)
+    ax2.set_ylabel('日涨跌幅(%)', color='white')
+
+    # 设置x轴刻度
+    step = max(1, len(plot_data) // 10)
+    tick_positions = x_values[::step]
+    tick_labels = [pd.to_datetime(d).strftime('%Y-%m-%d') for d in plot_data.index[::step]]
+
+    ax1.set_xticks(tick_positions)
+    ax1.set_xticklabels([], color='white')
+    ax2.set_xticks(tick_positions)
+    ax2.set_xticklabels(tick_labels, rotation=45, ha='right', color='white')
+
+    # 设置样式
+    ax1.set_ylabel('价格', color='white')
+    ax1.grid(True, alpha=0.3)
+    ax1.legend(loc='best', facecolor='#1E1E1E', labelcolor='white')
+    ax2.grid(True, alpha=0.3)
+    
+    # 设置背景色
+    ax1.set_facecolor('#1E1E1E')
+    ax2.set_facecolor('#1E1E1E')
+    fig.set_facecolor('#1E1E1E')
+
+    # 设置所有文本为白色
+    for text in ax1.get_xticklabels() + ax1.get_yticklabels():
+        text.set_color('white')
+    for text in ax2.get_xticklabels() + ax2.get_yticklabels():
+        text.set_color('white')
+
+    # 调整布局
+    plt.tight_layout()
+
+    return fig
+
+
+def analyze_market_declines(stock_code, start_date, end_date, window=5, threshold=0.005, trend_params=None):
     """
     分析股票数据中的梯度下跌的主函数。
 
@@ -425,9 +675,23 @@ def analyze_market_declines(stock_code, start_date, end_date, window=5, threshol
     - stock_code: 要分析的股票代码
     - start_date: 分析的开始日期 (YYYY-MM-DD)
     - end_date: 分析的结束日期 (YYYY-MM-DD)
-    - window: 要寻找的连续下跌天数
+    - window: 要寻找的连续下跌次数
     - threshold: 符合条件的最小下跌百分比
+    - trend_params: 趋势下跌的参数字典，包含以下键:
+        - trend_window: 趋势窗口大小
+        - trend_threshold: 趋势下跌阈值
+        - max_up_days: 最大允许上涨天数
+        - min_down_days: 最小要求下跌天数
     """
+    # 设置默认的趋势参数
+    if trend_params is None:
+        trend_params = {
+            'trend_window': window * 2,
+            'trend_threshold': 0.01,  # 1%
+            'max_up_days': (window * 2) // 3,
+            'min_down_days': (window * 2) // 2
+        }
+    
     # 创建分析结果目录
     analysis_time = datetime.now().strftime("%Y%m%d")
     static_dir = "static"
@@ -468,7 +732,7 @@ def analyze_market_declines(stock_code, start_date, end_date, window=5, threshol
 
         # 运行高级分析
         print("\n正在执行高级分析...")
-        adv_results = advanced_decline_analysis(data, window)
+        adv_results = advanced_decline_analysis(data, window, threshold, trend_params)
 
         print("\n高级分析结果:")
         for pattern_type, results in adv_results.items():
@@ -481,7 +745,10 @@ def analyze_market_declines(stock_code, start_date, end_date, window=5, threshol
 
                 # 可视化高级分析模式
                 for pattern_date in results.index:
-                    fig = visualize_advanced_pattern(data, pattern_date, pattern_type, window)
+                    if pattern_type == 'trend_declines':
+                        fig = visualize_trend_pattern(data, pattern_date, int(results.loc[pattern_date, 'window_size']))
+                    else:
+                        fig = visualize_advanced_pattern(data, pattern_date, pattern_type, window)
                     fig.savefig(f"{result_dir}/charts/{pattern_type}_{pattern_date.strftime('%Y%m%d')}.png")
                     plt.close(fig)
 
@@ -511,19 +778,39 @@ def main():
     if not end_date:
         end_date = "2025-02-25"
 
-    window_input = input("请输入连续下跌天数 (默认5天): ").strip()
+    window_input = input("请输入连续下跌次数 (默认5次): ").strip()
     window = int(window_input) if window_input else 5
 
     threshold_input = input("请输入单日下跌最小阈值 (默认0.5%): ").strip()
     threshold = float(threshold_input) / 100 if threshold_input else 0.005
+    
+    # 获取趋势下跌相关参数
+    print("\n高级参数设置 (直接回车使用默认值):")
+    
+    trend_window_input = input(f"趋势窗口大小 (默认{window*2}天): ").strip()
+    trend_window = int(trend_window_input) if trend_window_input else window * 2
+    
+    trend_threshold_input = input("趋势下跌阈值 (默认1.0%): ").strip()
+    trend_threshold = float(trend_threshold_input) / 100 if trend_threshold_input else 0.01
+    
+    max_up_days_input = input(f"最大允许上涨天数 (默认{trend_window//3}天): ").strip()
+    max_up_days = int(max_up_days_input) if max_up_days_input else trend_window // 3
+    
+    min_down_days_input = input(f"最小要求下跌天数 (默认{trend_window//2}天): ").strip()
+    min_down_days = int(min_down_days_input) if min_down_days_input else trend_window // 2
     
     # 输入参数打印
     print(f"\n分析参数:")
     print(f"股票代码: {stock_code}")
     print(f"开始日期: {start_date}")
     print(f"结束日期: {end_date}")
-    print(f"连续下跌天数: {window}")
+    print(f"连续下跌次数: {window}")
     print(f"单日下跌最小阈值: {threshold * 100}%")
+    print(f"\n高级参数:")
+    print(f"趋势窗口大小: {trend_window}天")
+    print(f"趋势下跌阈值: {trend_threshold * 100}%")
+    print(f"最大允许上涨天数: {max_up_days}天")
+    print(f"最小要求下跌天数: {min_down_days}天")
     
 
     print(f"\n开始分析 {stock_code} 的数据...")
@@ -535,7 +822,13 @@ def main():
             start_date=start_date,
             end_date=end_date,
             window=window,
-            threshold=threshold
+            threshold=threshold,
+            trend_params={
+                'trend_window': trend_window,
+                'trend_threshold': trend_threshold,
+                'max_up_days': max_up_days,
+                'min_down_days': min_down_days
+            }
         )
 
         if result_dir:
@@ -546,6 +839,8 @@ def main():
 
     except Exception as e:
         print(f"分析过程中出错: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
