@@ -140,8 +140,21 @@ def analyze_stock():
             # 遍历charts目录获取所有图表
             for filename in os.listdir(charts_dir):
                 file_path = f"{base_url}{STATIC_URL_PATH}/analysis_results/{stock_code}_{datetime.now().strftime('%Y%m%d')}/{CHARTS_SUBDIR}/{filename}"
+                
+                # 提取日期部分，用于匹配
+                date_part = None
+                if '_' in filename:
+                    parts = filename.split('_')
+                    if len(parts) >= 3:
+                        date_part = parts[2].split('.')[0]  # 获取日期部分，去掉扩展名
+                
                 if filename.startswith('basic_pattern_'):
-                    response['patterns']['charts']['basic_patterns'].append(file_path)
+                    # 只有当图表对应的日期在patterns列表中时，才添加到basic_patterns图表列表
+                    if date_part:
+                        # 检查这个日期是否在patterns的日期列表中
+                        pattern_dates = [d['date'].replace('-', '') for d in response['patterns']['basic_patterns']]
+                        if date_part in pattern_dates:
+                            response['patterns']['charts']['basic_patterns'].append(file_path)
                 elif filename.startswith('consecutive_declines_'):
                     response['patterns']['charts']['consecutive_declines'].append(file_path)
                 elif filename.startswith('volume_confirmed_declines_'):
