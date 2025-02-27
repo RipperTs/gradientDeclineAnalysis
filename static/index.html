@@ -388,19 +388,6 @@
                     </div>
                 </el-tab-pane>
 
-                <el-tab-pane label="成交量确认下跌" name="volume">
-                    <div v-if="patterns.charts.volume_confirmed_declines?.length" class="patterns-container">
-                        <div class="pattern-images">
-                            <template v-for="(chart, index) in patterns.charts.volume_confirmed_declines">
-                                <div :key="'volume-'+index" class="pattern-card">
-                                    <h4>成交量确认下跌 {{index + 1}}</h4>
-                                    <img :src="chart" class="pattern-image" @click="showImage(chart, 'volume_confirmed_declines')">
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-                </el-tab-pane>
-
                 <el-tab-pane label="均线交叉下跌" name="ma">
                     <div v-if="patterns.charts.ma_crossover_declines?.length" class="patterns-container">
                         <div class="pattern-description">
