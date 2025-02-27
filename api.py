@@ -1,14 +1,33 @@
 from flask import Flask, jsonify, request, send_from_directory
 from datetime import datetime
 import os
+
+from service.snowball_service import SnowballService
 from xueqiu import analyze_market_declines, fetch_data_from_xueqiu
 from config import *
 
 app = Flask(__name__, static_folder=STATIC_FOLDER, static_url_path=STATIC_URL_PATH)
-
+snowball = SnowballService()
 @app.route('/')
 def index():
     return send_from_directory(STATIC_FOLDER, 'index.html')
+
+@app.route(f'/api/{API_VERSION}/suggest_stock', methods=['GET'])
+def suggest_stock():
+    """
+    根据关键字搜索股票代码
+    :return: 股票搜索结果
+    """
+    keyword = request.args.get('keyword', '')
+    if not keyword:
+        return jsonify({
+            'code': 400,
+            'message': '请提供搜索关键词',
+            'success': False
+        }), 400
+    
+    return jsonify(snowball.suggest_stock(keyword))
+
 
 @app.route(f'/api/{API_VERSION}/analyze', methods=['GET'])
 def analyze_stock():
